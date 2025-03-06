@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:13 # Official Postgres image
+    container_name: postgres # Name the container for easier management
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - 5432:5432 # Mapping Container port to Host port
+    volumes:
+      - postgres-data:/var/lib/postgresql/data # Data persistence
+    networks:
+      - usaspending-net # Connect to network
+
+  airflow:
+    image: apache/airflow:2.10.5
+    container_name: airflow
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor  # Use SequentialExecutor for now (simpler setup)
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}  # Used for encrypting connections
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW_SECRET_KEY}  # Web UI session security
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False  # Prevent loading example DAGs
+      - AIRFLOW__WEBSERVER__USER=admin
+      - AIRFLOW__WEBSERVER__PASSWORD=admin
+    ports:
+      - 8080:8080  # Airflow UI accessible at http://localhost:8080
+    volumes:
+      - airflow-dags:/opt/airflow/dags  # Store DAGs
+      - airflow-logs:/opt/airflow/logs  # Store logs
+    networks:
+      - usaspending-net
+    depends_on:
+      - postgres  # Airflow needs Postgres to start first, still needs added dep
+
+    # Wait for Postgres to be ready (init can be slow so add a few seconds), then initialize DB and start Airflow components
+    command: >
+      bash -c "sleep 10 && airflow db init && airflow webserver & airflow scheduler" 
+
+networks:
+  usaspending-net:  # Custom network for container communication
+
+volumes:
+  # Persistent Volume
+  postgres-data:
+  airflow-dags:
+  airflow-logs:
